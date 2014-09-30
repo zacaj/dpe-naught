@@ -25,7 +25,7 @@ db.open(function(err, db) {
             }
         });
 		db.collection('users', {strict:true}, function(err, collection) {
-           // if (err || 1) {
+           // if (err || 1) {//force reinitialize db regardless
                 console.log("The 'users' collection doesn't exist. Creating it with sample data...");
 				var users = [
 				{
@@ -36,7 +36,23 @@ db.open(function(err, db) {
 "xFxdU6jE0NQ+Z+zEdhUTooNRaY5nZiu5PgDB0ED/ZKBUSLKL7eibMxZtMlUDHjm4\n"+
 "gwQco1KRMDSmXSMkDwIDAQAB\n"+
 "-----END PUBLIC KEY-----",
-					
+					/*
+					-----BEGIN RSA PRIVATE KEY-----
+MIICXQIBAAKBgQDlOJu6TyygqxfWT7eLtGDwajtNFOb9I5XRb6khyfD1Yt3YiCgQ
+WMNW649887VGJiGr/L5i2osbl8C9+WJTeucF+S76xFxdU6jE0NQ+Z+zEdhUTooNR
+aY5nZiu5PgDB0ED/ZKBUSLKL7eibMxZtMlUDHjm4gwQco1KRMDSmXSMkDwIDAQAB
+AoGAfY9LpnuWK5Bs50UVep5c93SJdUi82u7yMx4iHFMc/Z2hfenfYEzu+57fI4fv
+xTQ//5DbzRR/XKb8ulNv6+CHyPF31xk7YOBfkGI8qjLoq06V+FyBfDSwL8KbLyeH
+m7KUZnLNQbk8yGLzB3iYKkRHlmUanQGaNMIJziWOkN+N9dECQQD0ONYRNZeuM8zd
+8XJTSdcIX4a3gy3GGCJxOzv16XHxD03GW6UNLmfPwenKu+cdrQeaqEixrCejXdAF
+z/7+BSMpAkEA8EaSOeP5Xr3ZrbiKzi6TGMwHMvC7HdJxaBJbVRfApFrE0/mPwmP5
+rN7QwjrMY+0+AbXcm8mRQyQ1+IGEembsdwJBAN6az8Rv7QnD/YBvi52POIlRSSIM
+V7SwWvSK4WSMnGb1ZBbhgdg57DXaspcwHsFV7hByQ5BvMtIduHcT14ECfcECQATe
+aTgjFnqE/lQ22Rk0eGaYO80cc643BXVGafNfd9fcvwBMnk0iGX0XRsOozVt5Azil
+psLBYuApa66NcVHJpCECQQDTjI2AQhFc1yRnCU/YgDnSpJVm1nASoRUnU8Jfm3Oz
+uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
+-----END RSA PRIVATE KEY----- 
+*/
 				}];
 			 
 				db.collection('users', function(err, collection) {
@@ -48,7 +64,7 @@ db.open(function(err, db) {
 		db.collection('streams', {strict:true}, function(err, collection) {
            // if (err || 1) {
                 console.log("The 'streams' collection doesn't exist. Creating it with sample data...");
-				var streams = [
+				var streams = [//automatically log zacaj in for testing
 				{
 					id:"12345",
 					user: "zacaj",
@@ -68,8 +84,8 @@ db.open(function(err, db) {
 });
  
 var login = function(req, res) {
-    var username = req.query.username;
-    var streamid = req.query.streamid;
+    var username = req.param("username");
+    var streamid = req.param("streamid");
 	if(!username || !streamid)
 		return;
     console.log('user '+username+'requesting login (S'+streamid+')');
@@ -80,7 +96,7 @@ var login = function(req, res) {
 			db.collection('streams',{strict:true},function(err,collection) {
 				if(err)	{ console.log(err);	return;	}
 				collection.remove({id:streamid},{safe:true},function(err,result){});
-				collection.insert({id:streamid,user:username,nextKey:key,loginTimeout:9999});
+				collection.insert({id:streamid,user:username,nextKey:key,loginTimeout:9999},{safe:true},function(err,result){});
 			});
 			var rsa = new NodeRSA(item.publicKey);
 			res.send(rsa.encrypt(key,'base64'));
@@ -92,7 +108,7 @@ var nrest = function(req, res) {
     var e_json = req.param("json");
 	if(!e_json || !streamid)
 		return;
-    console.log(e_json);
+    //console.log(e_json);
 	
     db.collection('streams', function(err, collection) {
         collection.findOne({'id':streamid}, function(err, item) {

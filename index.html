@@ -14,7 +14,7 @@ function login()
 	var streamid=document.getElementById('streamid').value;
 	var decrypt=new JSEncrypt();
 	decrypt.setPrivateKey(key);
-	var jqxhr=$.ajax("/api/login/?username="+document.getElementById('username')+"&streamid="+streamid)
+	var jqxhr=$.ajax("/api/login/?username="+document.getElementById('username').value+"&streamid="+streamid)
 	.success(function(data,text,jqXHR)
 	{
 		var encrypted=data;
