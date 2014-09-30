@@ -1,0 +1,12 @@
+{
+    "name": "dpe-naught",
+    "description": "yep",
+    "version": "0.0.1",
+    "private": true,
+    "dependencies": {
+        "express": "4.x",
+		"node-rsa": "0.1.53",
+		"morgan":"1.3.2",
+		"bson":"0.x"
+    }
+}

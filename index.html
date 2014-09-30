@@ -1,0 +1,25 @@
+<head>
+
+<script src="jsencrypt.min.js" type="application/javascript"></script>
+<script src="http://code.jquery.com/jquery-1.8.3.min.js"></script>
+<script>
+function submit()
+{
+	var key=document.getElementById('privateKey').value;
+	var decrypt=new JSEncrypt();
+	decrypt.setPrivateKey(key);
+	var jqxhr=$.ajax("/api/login/?username=zacaj")
+	.success(function(data,text,jqXHR)
+	{
+		var encrypted=data;
+		var nextkey=decrypt.decrypt(encrypted);
+		alert(nextkey);
+	});
+}
+
+</script>
+</head>
+<body>
+private key: <input type="text" id="privateKey">
+<input type="submit" onclick="submit();">
+</body>
