@@ -7,6 +7,8 @@
         "express": "4.x",
 		"node-rsa": "0.1.53",
 		"morgan":"1.3.2",
-		"bson":"0.x"
+		"bson":"0.x",
+		"body-parser":"1.9.x",
+		"crypto-js":""
     }
 }

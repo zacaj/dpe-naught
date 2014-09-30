@@ -1,14 +1,20 @@
 <head>
 
 <script src="jsencrypt.min.js" type="application/javascript"></script>
+<script src="aes.js" type="application/javascript"></script>
 <script src="http://code.jquery.com/jquery-1.8.3.min.js"></script>
+<script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/core-min.js"></script>
+<script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/enc-base64.js"></script>
+
+<script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/enc-utf16-min.js"></script>
 <script>
-function submit()
+function login()
 {
 	var key=document.getElementById('privateKey').value;
+	var streamid=document.getElementById('streamid').value;
 	var decrypt=new JSEncrypt();
 	decrypt.setPrivateKey(key);
-	var jqxhr=$.ajax("/api/login/?username=zacaj")
+	var jqxhr=$.ajax("/api/login/?username="+document.getElementById('username')+"&streamid="+streamid)
 	.success(function(data,text,jqXHR)
 	{
 		var encrypted=data;
@@ -17,9 +23,34 @@ function submit()
 	});
 }
 
+function send()
+{
+	var streamid=document.getElementById('streamid').value;
+	var json=document.getElementById('json').value;
+	var key=document.getElementById('key').value;
+	var params=CryptoJS.AES.encrypt(json,key);
+	var e_json=params.toString();
+	var jqxhr=$.post("/api/nrest/",{json:e_json,streamid:streamid},
+	function(data,text,jqXHR)
+	{
+		var e_resp=data;
+		var d_resp=CryptoJS.AES.decrypt(e_resp,key);
+		alert(d_resp.toString(CryptoJS.enc.Utf8));
+	});
+}
 </script>
 </head>
 <body>
+streamid: <input type="text" id="streamid" value="12345"><br>
+<p>
+username: <input type="text" id="username" value="zacaj"><br>
 private key: <input type="text" id="privateKey">
-<input type="submit" onclick="submit();">
+<input type="submit" onclick="login();" value="log in">
+</p>
+<p>
+json: <input type="text" id="json" value="hello"><br>
+next-key: <input type="text" id="key" value="7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153"><br>
+<input type="submit" onclick="send();" value="send command">
+<p id="output"></p>
+</p>
 </body>
