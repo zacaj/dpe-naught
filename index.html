@@ -36,7 +36,7 @@ function send()
 		var e_resp=data;
 		var d_resp=CryptoJS.AES.decrypt(e_resp,key);
 		alert(d_resp.toString(CryptoJS.enc.Utf8));
-	});
+	}).fail(function(error) { alert(error.responseText) });
 }
 </script>
 </head>
@@ -48,9 +48,32 @@ private key: <input type="text" id="privateKey">
 <input type="submit" onclick="login();" value="log in">
 </p>
 <p>
-json: <input type="text" id="json" value="hello"><br>
+json: <input type="text" id="json" value='{     "user":"zacaj",     "timestamp":"",     "uid":"dfgdfg",     "command": 	{ 		"command":"test-get", 		"id":"2" 	} }'><br>
 next-key: <input type="text" id="key" value="7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153"><br>
 <input type="submit" onclick="send();" value="send command">
 <p id="output"></p>
+<p>
+get: 
+{
+	"user" : "zacaj",
+	"timestamp" : "",
+	"uid" : "dfgdfg",
+	"command" : {
+		"command" : "test-get",
+		"id" : "3"
+	}
+}
+<br>
+put:
+{
+	"user" : "zacaj",
+	"timestamp" : "",
+	"uid" : "dfgdfg",
+	"command" : {
+		"command" : "test-put",
+		"id" : "3",
+		"str" : "hello"
+	}
+}
 </p>
 </body>

@@ -69,7 +69,8 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
 					id:"12345",
 					user: "zacaj",
 					nextKey: "7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153",
-					loginTimeout:9999
+					loginTimeout:9999,
+					lastUid: ""
 				}];
 			 
 				db.collection('streams', function(err, collection) {
@@ -96,7 +97,7 @@ var login = function(req, res) {
 			db.collection('streams',{strict:true},function(err,collection) {
 				if(err)	{ console.log(err);	return;	}
 				collection.remove({id:streamid},{safe:true},function(err,result){});
-				collection.insert({id:streamid,user:username,nextKey:key,loginTimeout:9999},{safe:true},function(err,result){});
+				collection.insert({id:streamid,user:username,nextKey:key,loginTimeout:9999,lastUid:""},{safe:true},function(err,result){});
 			});
 			var rsa = new NodeRSA(item.publicKey);
 			res.send(rsa.encrypt(key,'base64'));
@@ -108,7 +109,7 @@ var nrest = function(req, res) {
     var e_json = req.param("json");
 	if(!e_json || !streamid)
 		return;
-    //console.log(e_json);
+	console.log(streamid);
 	
     db.collection('streams', function(err, collection) {
         collection.findOne({'id':streamid}, function(err, item) {
@@ -118,15 +119,91 @@ var nrest = function(req, res) {
 				return;
 			}
             var key=item.nextKey;
-			var decipher=CryptoJS.AES.decrypt(e_json,key);
-			var d_json=decipher.toString(CryptoJS.enc.Utf8);
+			var d_json;
+			try
+			{
+				var decipher=CryptoJS.AES.decrypt(e_json,key);
+				d_json=decipher.toString(CryptoJS.enc.Utf8);
+			} catch (e)
+			{ res.status(400).send('decrypt fail: '+e); return; }
 			console.log('DEBUG: received command: '+d_json);
-			//var command=JSON.parse(d_json);
-			res.send(CryptoJS.AES.encrypt(d_json,key).toString());
+			var json;
+			try { json=JSON.parse(d_json); }
+				catch(e)
+				{ res.status(400).send('JSON parse fail: '+e); return; }
+			if(!json.command || !json.uid)
+			{ res.status(400).send('json contents invalid'); return; }
+			db.collection('streams',{strict:true},function(err,collection) {
+				if(err)	{ console.log(err);	return;	}
+				//collection.insert({id:streamid,user:username,nextKey:key,loginTimeout:9999,lastUid:json.uid},{safe:true},function(err,result){});
+				collection.findOne({id:streamid},function(err,stream)
+				{
+					if(stream.lastUid==json.uid)
+					{
+					//todo something
+					}
+					else
+					{
+						collection.update({id:streamid},{$set:{lastUid:json.uid}},{w:0});
+					}
+				});
+			});
+			processCommand(json.command,function(resp)
+			{
+				var ret=JSON.stringify({
+					'next-key':key,
+					'user':json.user,
+					'timestamp':'',
+					'uid':json.uid,
+					'response':resp
+				});
+				console.log(ret);
+				res.send(CryptoJS.AES.encrypt(ret,key).toString());
+			});
         });
     });
 };
- 
+
+var processCommand=function(cmd,res)
+{
+	switch(cmd.command)
+	{
+	case "login":
+		res({
+			'logout-time':'60m',//todo
+			'active-stream-count':'1'
+		});
+		break;        
+	case "test-put":
+		if(!cmd.id)
+		{}//todo errors
+		db.collection('test', {strict:true}, function(err, collection) {
+            if (err) {
+				res({error:""+err});
+                console.log(err);
+            }
+			else
+			{
+				collection.insert({id:cmd.id,str:cmd.str}, {safe:true}, function(err, result) {});
+				//collection.update({id:cmd.id},{id:cmd.id,str:cmd.str},{upsert:true});
+			}
+        });
+		res({});
+		break;        
+	case "test-get":
+		db.collection('test', function(err, collection) {
+			collection.findOne({'id':cmd.id}, function(err, item) {	
+				if(item)
+					res({str:item.str});
+				else
+					res({error:"id "+cmd.id+" not found"});
+			}
+		)});
+		break;        
+	}
+}
+	
+
 /*--------------------------------------------------------------------------------------------------------------------*/
 // Populate database with sample data -- Only used once: the first time the application is started.
 // You'd typically not find this code in a real-life app, since the database would already exist.
