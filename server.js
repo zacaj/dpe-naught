@@ -79,6 +79,23 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
 				});
            // }
         });
+		db.collection('keystore', {strict:true}, function(err, collection) {
+           // if (err || 1) {
+                console.log("The 'keystore' collection doesn't exist. Creating it with sample data...");
+				var keystore = [//automatically log zacaj in for testing
+				{
+					uid:"zacaj@server.com|privatetest",
+					e_key:"blarg"
+				}];
+			 
+				db.collection('keystore', function(err, collection) {
+					if(err)
+						console.log(err);
+					collection.remove({uid:"zacaj@server.com|privatetest"}, {safe:true}, function(err, result) {});
+					collection.insert(keystore, {safe:true}, function(err, result) {});
+				});
+           // }
+        });
     }
 	else
         console.log(err);
@@ -157,15 +174,62 @@ var nrest = function(req, res) {
 					'uid':json.uid,
 					'response':resp
 				});
-				console.log(ret);
+				console.log('resp: '+ret);
+				res.send(CryptoJS.AES.encrypt(ret,key).toString());
+			},
+			function(err)
+			{
+				var ret=JSON.stringify({
+					'next-key':key,
+					'user':json.user,
+					'timestamp':'',
+					'uid':json.uid,
+					'errors':err
+				});
+				console.log('error: '+ret);
 				res.send(CryptoJS.AES.encrypt(ret,key).toString());
 			});
         });
     });
 };
 
-var processCommand=function(cmd,res)
+var mg={
+	findOneIn:function(collectionName,query,callback,onError)
+	{
+		onError=onError||function(err){};
+		db.collection(collectionName, function(mgerr, collection) {
+			if (mgerr)
+			{console.log(mgerr);onError("internal db open failure");}
+			else
+				collection.findOne(query, function(mgerr,item)
+				{
+					if (mgerr) 
+					{console.log(mgerr);onError("interal db find error");}
+					else
+						callback(item);
+				});
+			});
+	},
+	doCmdIn:function(collectionName,callback,onError)
+	{
+		onError=onError||function(err){};
+		db.collection(collectionName, {strict:true}, function(mgerr, collection) {
+				if (mgerr) 
+				{console.log(mgerr);onError("internal db open failure");}
+				else
+				{
+					callback(collection);
+				}
+			});
+	}
+};
+
+var processCommand=function(cmd,res,err)
 {
+	var defErr=function(err)
+	{
+		err([{code:0,error:err}]);
+	};
 	switch(cmd.command)
 	{
 	case "login":
@@ -176,30 +240,53 @@ var processCommand=function(cmd,res)
 		break;        
 	case "test-put":
 		if(!cmd.id)
-		{}//todo errors
-		db.collection('test', {strict:true}, function(err, collection) {
-            if (err) {
-				res({error:""+err});
-                console.log(err);
-            }
-			else
+		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		mg.doCmdIn('test',function(test)
+		{
+			test.update({id:cmd.id},{str:cmd.str,id:cmd.id},{upsert:true,safe:true,w:1},function(err)
 			{
-				collection.insert({id:cmd.id,str:cmd.str}, {safe:true}, function(err, result) {});
-				//collection.update({id:cmd.id},{id:cmd.id,str:cmd.str},{upsert:true});
-			}
-        });
-		res({});
+				if(err)
+				{ console.log(err); defErr("internal upsert fail"); }
+				else
+					res({});		
+			});		
+		},defErr);
 		break;        
 	case "test-get":
-		db.collection('test', function(err, collection) {
-			collection.findOne({'id':cmd.id}, function(err, item) {	
-				if(item)
-					res({str:item.str});
+		if(!cmd.id)
+		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		mg.findOneIn('test',{'id':cmd.id},function(item) {			
+			if(item)
+				res({str:item.str});
+			else
+				err([{code:404,error:"id "+cmd.id+" not found"}]);
+		},defErr);
+		break;   
+	case "put-key":
+		if(!cmd.uid || !cmd.e_key)
+		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		//todo check uid format
+		mg.doCmdIn('keystore',function(keystore)
+		{
+			keystore.update({uid:cmd.uid},{e_key:cmd.e_key,uid:cmd.uid},{upsert:true,safe:true,w:1},function(err)
+			{
+				if(err)
+				{ console.log(err); defErr("internal upsert fail"); }
 				else
-					res({error:"id "+cmd.id+" not found"});
-			}
-		)});
+					res({});		
+			});		
+		},defErr);
 		break;        
+	case "get-key":
+		if(!cmd.uid)
+		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		mg.findOneIn('keystore',{'uid':cmd.uid},function(item) {			
+			if(item)
+				res({uid:item.uid,e_key:item.e_key});
+			else
+				err([{code:404,error:"uid "+cmd.id+" not found"}]);
+		},defErr);
+		break; 		
 	}
 }
 	

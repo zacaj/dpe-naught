@@ -53,7 +53,7 @@ next-key: <input type="text" id="key" value="7436cb48e35e8c3de32b21296c6a5e1aa4a
 <input type="submit" onclick="send();" value="send command">
 <p id="output"></p>
 <p>
-get: 
+get: <br>
 {
 	"user" : "zacaj",
 	"timestamp" : "",
@@ -64,7 +64,7 @@ get:
 	}
 }
 <br>
-put:
+put:<br>
 {
 	"user" : "zacaj",
 	"timestamp" : "",
@@ -73,6 +73,29 @@ put:
 		"command" : "test-put",
 		"id" : "3",
 		"str" : "hello"
+	}
+}
+<br>
+put-key:<br>
+{
+	"user" : "zacaj",
+	"timestamp" : "",
+	"uid" : "dfgdfg",
+	"command" : {
+		"command" : "put-key",
+		 "uid":"user@server.com|12345", 
+		"e_key":"hello world"
+	}
+}
+<br>
+get-key:<br>
+{
+	"user" : "zacaj",
+	"timestamp" : "",
+	"uid" : "dfgdfg",
+	"command" : {
+		"command" : "get-key",
+		 "uid":"user@server.com|12345"
 	}
 }
 </p>
