@@ -15,6 +15,54 @@ var Server = mongo.Server,
 var server = new Server('localhost', 27017, {auto_reconnect: true});
 db = new Db('dpe-n-db', server,{w:1});
  
+function makeUid()
+{
+	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+		var r = Math.random()*16|0, v = c == 'x' ? r : (r&0x3|0x8);
+		return v.toString(16);
+	});
+}
+ 
+function makeUser(name,publicKey)
+{
+	var user= {
+		name: name,
+		publicKey: publicKey,
+		uid: makeUid(),
+		createdOn: new Date().getTime(),
+	}
+	return user;
+}
+
+function makeKey(name,userUid,uid,s_key)
+	return {
+		uid:uid,
+		s_key:s_key,
+		user:userUid,
+		name:name
+	};
+}
+
+function registerAuthCommand(cmd,streamid,authid,authcode,keyUid)
+{
+	db.collection('authCommands', {strict:true}, function(err, collection) {
+		if (err) {
+			console.log(err);
+		}
+		else
+		{
+			collection.insert( {
+				"createdAt":new Date(),
+				"cmd":cmd,
+				"streamid":streamid,
+				"authid":authid,
+				"authcode":authcode,
+				"authkey":keyUid,
+			},{w:1});
+		}
+	});
+}
+ 
 db.open(function(err, db) {
     if(!err) {
         console.log("Connected to 'dpe-n-db' database");
@@ -29,6 +77,7 @@ db.open(function(err, db) {
                 console.log("The 'users' collection doesn't exist. Creating it with sample data...");
 				var users = [
 				{
+					uid: "1"
 					name: "zacaj",
 					publicKey: "-----BEGIN PUBLIC KEY-----\n"+
 "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDlOJu6TyygqxfWT7eLtGDwajtN\n"+
@@ -66,8 +115,8 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
                 console.log("The 'streams' collection doesn't exist. Creating it with sample data...");
 				var streams = [//automatically log zacaj in for testing
 				{
-					id:"12345",
-					user: "zacaj",
+					uid:"12345",
+					user: "1",
 					nextKey: "7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153",
 					loginTimeout:9999,
 					lastUid: ""
@@ -85,7 +134,9 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
 				var keystore = [//automatically log zacaj in for testing
 				{
 					uid:"zacaj@server.com|privatetest",
-					e_key:"blarg"
+					s_key:"blarg",
+					user:"1",
+					name:"test key"
 				}];
 			 
 				db.collection('keystore', function(err, collection) {
@@ -95,6 +146,12 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
 					collection.insert(keystore, {safe:true}, function(err, result) {});
 				});
            // }
+        });
+		db.collection('authCommands', {strict:true}, function(err, collection) {
+            if (err) {
+                console.log("The 'streams' collection doesn't exist. Creating it with sample data...");
+            }
+			collection.ensureIndex( { "createdAt": 1 }, { expireAfterSeconds: 3600*10 } )
         });
     }
 	else
@@ -113,8 +170,8 @@ var login = function(req, res) {
             var key="7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153";//todo generate keys
 			db.collection('streams',{strict:true},function(err,collection) {
 				if(err)	{ console.log(err);	return;	}
-				collection.remove({id:streamid},{safe:true},function(err,result){});
-				collection.insert({id:streamid,user:username,nextKey:key,loginTimeout:9999,lastUid:""},{safe:true},function(err,result){});
+				collection.remove({uid:streamid},{safe:true},function(err,result){});
+				collection.insert({uid:streamid,user:item.uid,nextKey:key,loginTimeout:9999,lastUid:""},{safe:true},function(err,result){});
 			});
 			var rsa = new NodeRSA(item.publicKey);
 			res.send(rsa.encrypt(key,'base64'));
@@ -165,30 +222,64 @@ var nrest = function(req, res) {
 					}
 				});
 			});
-			processCommand(json.command,function(resp)
+			var doSuccessResponse=function(resp)
+				{
+					var ret=JSON.stringify({
+						'next-key':key,
+						'user':json.user,
+						'timestamp':'',
+						'uid':json.uid,
+						'response':resp
+					});
+					console.log('resp: '+ret);
+					res.send(CryptoJS.AES.encrypt(ret,key).toString());
+				};
+			var doErrorResponse=function(err)
+				{
+					var ret=JSON.stringify({
+						'next-key':key,
+						'user':json.user,
+						'timestamp':'',
+						'uid':json.uid,
+						'errors':err
+					});
+					console.log('error: '+ret);
+					res.send(CryptoJS.AES.encrypt(ret,key).toString());
+				};
+			if(json.auth)
 			{
-				var ret=JSON.stringify({
-					'next-key':key,
-					'user':json.user,
-					'timestamp':'',
-					'uid':json.uid,
-					'response':resp
+				mg.findOneIn('keystore',{uid:json.auth},function(item) {
+					if(item)
+					{
+						if(!item.p_key)
+							doErrorResponse([{'code':406,error:"auth key type incorrect (p_key needed)"}]);
+						else
+						{
+							var authcode=makeUid();
+							var authid=makeUid();
+							registerAuthCommand(json.command,streamid,authid,authcode,json.auth);
+							var rsa = new NodeRSA(item.p_key);
+							doSuccessResponse({
+								"authid":authid,
+								"p_authcode":rsa.encrypt(authcode,'base64'),
+								"auth-key":json.auth,
+							});
+						}
+					}
+					else
+					{
+						doErrorResponse([{'code':404,error:"auth key not found"}]);
+					}
+				},function(err)
+				{
+					doErrorResponse([{code:0,error:err}]);
 				});
-				console.log('resp: '+ret);
-				res.send(CryptoJS.AES.encrypt(ret,key).toString());
-			},
-			function(err)
+			}
+			else
 			{
-				var ret=JSON.stringify({
-					'next-key':key,
-					'user':json.user,
-					'timestamp':'',
-					'uid':json.uid,
-					'errors':err
-				});
-				console.log('error: '+ret);
-				res.send(CryptoJS.AES.encrypt(ret,key).toString());
-			});
+				processCommand(json.command,doSuccessResponse,
+				doErrorResponse);
+			}
         });
     });
 };
@@ -224,7 +315,7 @@ var mg={
 	}
 };
 
-var processCommand=function(cmd,res,err)
+var processCommand=function(cmd,res,err,authdKeyUid)
 {
 	var defErr=function(err)
 	{
@@ -232,6 +323,21 @@ var processCommand=function(cmd,res,err)
 	};
 	switch(cmd.command)
 	{
+	case "perform-auth-command":
+		if(!cmd.authid || !cmd.authcode)
+		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		mg.findOneIn('authCommands',{authid:cmd.authid},function(item) {
+			if(item)
+			{
+				if(cmd.authcode!=item.authcode)
+					err([{code:412,error:"authcode incorrect"}]);
+				else
+					processCommand(item.cmd,res,err,item.authKey);
+			}
+			else
+				err([{code:419,error:"'authid' not recognized"}]);
+		},defErr);
+		break;
 	case "login":
 		res({
 			'logout-time':'60m',//todo
@@ -263,12 +369,12 @@ var processCommand=function(cmd,res,err)
 		},defErr);
 		break;   
 	case "put-key":
-		if(!cmd.uid || !cmd.e_key)
+		if(!cmd.uid || !cmd.s_key)
 		{	err([{code:400,error:"json key(s) missing"}]); break; }
 		//todo check uid format
 		mg.doCmdIn('keystore',function(keystore)
 		{
-			keystore.update({uid:cmd.uid},{e_key:cmd.e_key,uid:cmd.uid},{upsert:true,safe:true,w:1},function(err)
+			keystore.update({uid:cmd.uid},{s_key:cmd.s_key,uid:cmd.uid},{upsert:true,safe:true,w:1},function(err)
 			{
 				if(err)
 				{ console.log(err); defErr("internal upsert fail"); }
@@ -282,7 +388,7 @@ var processCommand=function(cmd,res,err)
 		{	err([{code:400,error:"json key(s) missing"}]); break; }
 		mg.findOneIn('keystore',{'uid':cmd.uid},function(item) {			
 			if(item)
-				res({uid:item.uid,e_key:item.e_key});
+				res({uid:item.uid,s_key:item.s_key});
 			else
 				err([{code:404,error:"uid "+cmd.id+" not found"}]);
 		},defErr);
