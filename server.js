@@ -35,6 +35,7 @@ function makeUser(name,publicKey)
 }
 
 function makeKey(name,userUid,uid,s_key)
+{
 	return {
 		uid:uid,
 		s_key:s_key,
@@ -77,7 +78,7 @@ db.open(function(err, db) {
                 console.log("The 'users' collection doesn't exist. Creating it with sample data...");
 				var users = [
 				{
-					uid: "1"
+					uid: "1",
 					name: "zacaj",
 					publicKey: "-----BEGIN PUBLIC KEY-----\n"+
 "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDlOJu6TyygqxfWT7eLtGDwajtN\n"+
@@ -149,9 +150,16 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
         });
 		db.collection('authCommands', {strict:true}, function(err, collection) {
             if (err) {
-                console.log("The 'streams' collection doesn't exist. Creating it with sample data...");
+                console.log("The 'authCommands' collection doesn't exist. Creating it with sample data...");
             }
-			collection.ensureIndex( { "createdAt": 1 }, { expireAfterSeconds: 3600*10 } )
+			db.collection('authCommands',{w:1},function(err,collection) {
+				if(err)
+					console.log(err);
+				collection.ensureIndex( { "createdAt": 1 }, { expireAfterSeconds: 3600*10 } ,function(err) {
+				if(err)
+					console.log(err);
+				});
+			});
         });
     }
 	else
