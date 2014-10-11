@@ -201,6 +201,7 @@ var nrest = function(req, res) {
 				return;
 			}
             var key=item.nextKey;
+			var userUid=item.user;
 			var d_json;
 			try
 			{
@@ -285,7 +286,7 @@ var nrest = function(req, res) {
 			}
 			else
 			{
-				processCommand(json.command,doSuccessResponse,
+				processCommand(userUid,json.command,doSuccessResponse,
 				doErrorResponse);
 			}
         });
@@ -305,7 +306,7 @@ var mg={
 					if (mgerr) 
 					{console.log(mgerr);onError("interal db find error");}
 					else
-						callback(item);
+						callback(item,collection);
 				});
 			});
 	},
@@ -323,11 +324,29 @@ var mg={
 	}
 };
 
-var processCommand=function(cmd,res,err,authdKeyUid)
+var processCommand=function(useruid,cmd,res,err,authdKeyUid)
 {
 	var defErr=function(err)
 	{
 		err([{code:0,error:err}]);
+	};
+	var doAuthErr=function(err)
+	{
+		if(!cmd.auth)
+		{
+			err([{code:401,error:"authorization required"}]);
+			return false;
+		}
+	};
+	var checkAuth=function(allowedKeyUids)
+	{
+		if(allowedKeyUids)
+			if(allowedKeyUids.indexOf(authdKeyUid)==-1)
+			{
+				err([{code:401,error:"user not authorized"}]);
+				return false;
+			}
+		return true;		
 	};
 	switch(cmd.command)
 	{
@@ -340,12 +359,60 @@ var processCommand=function(cmd,res,err,authdKeyUid)
 				if(cmd.authcode!=item.authcode)
 					err([{code:412,error:"authcode incorrect"}]);
 				else
-					processCommand(item.cmd,res,err,item.authKey);
+					processCommand(userUid,item.cmd,res,err,item.authKey);
 			}
 			else
 				err([{code:419,error:"'authid' not recognized"}]);
 		},defErr);
 		break;
+	case "edit-channel":
+		if(!cmd.uid)
+		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		if(cmd.uid=="")//new channel
+		{
+			if(cmd["remove-channel-key"] || cmd["remove-post-key"])
+			{	err([{code:406,error:"cannot remove keys from non-existent channels"}]); break;}
+			var channel={
+				uid:makeUid(),
+				creator:userUid,
+				"channel-keys":cmd["add-channel-keys"],
+				name:cmd.name,
+			};
+			if(cmd["add-post-key"])
+				channel["add-post-key"]=cmd["add-post-key"];
+			if(cmd.description)
+				channel.description=description;
+			//todo posts
+			mg.doCmdIn('channels',function(collection){
+				collection.insert(channel,{w:1},function(err) {
+					if(err)
+					{ console.log(err); defErr("internal db insert fail"); }
+				});
+			},defErr);
+			break;
+		}
+		else if(!doAuthErr(err)) break;
+		mg.findOneIn('channels',{uid:cmd.uid},function(item,collection) {
+			if(item)
+			{
+				var update=new Object();
+				if(cmd.name)
+				{
+					if(cmd.name=="")
+					{	err([{code:406,error:"channels must have names"}]); return; }	
+					update.name=cmd.name;
+				}
+				if(cmd.description)
+					update.description=cmd.description;
+				//todo add/remove
+				collection.update({uid:cmd.uid},update,{w:1},function(err) {
+					if(err)
+					{ console.log(err); defErr("internal db update fail"); }
+				});
+			}
+			else
+				err([{code:404,error:"'uid' not found"}]);
+		},defErr);
 	case "login":
 		res({
 			'logout-time':'60m',//todo
