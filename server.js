@@ -124,7 +124,7 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
 				}];
 			 
 				db.collection('streams', function(err, collection) {
-					collection.remove({user:"zacaj"}, {safe:true}, function(err, result) {});
+					collection.remove({user:"1"}, {safe:true}, function(err, result) {});
 					collection.insert(streams, {safe:true}, function(err, result) {});
 				});
            // }
@@ -194,7 +194,7 @@ var nrest = function(req, res) {
 	console.log(streamid);
 	
     db.collection('streams', function(err, collection) {
-        collection.findOne({'id':streamid}, function(err, item) {
+        collection.findOne({'uid':streamid}, function(err, item) {
 			if(err)
 			{
 				console.log(err);
@@ -219,7 +219,7 @@ var nrest = function(req, res) {
 			db.collection('streams',{strict:true},function(err,collection) {
 				if(err)	{ console.log(err);	return;	}
 				//collection.insert({id:streamid,user:username,nextKey:key,loginTimeout:9999,lastUid:json.uid},{safe:true},function(err,result){});
-				collection.findOne({id:streamid},function(err,stream)
+				collection.findOne({uid:streamid},function(err,stream)
 				{
 					if(stream.lastUid==json.uid)
 					{
@@ -227,7 +227,7 @@ var nrest = function(req, res) {
 					}
 					else
 					{
-						collection.update({id:streamid},{$set:{lastUid:json.uid}},{w:0});
+						collection.update({uid:streamid},{$set:{lastUid:json.uid}},{w:0});
 					}
 				});
 			});
