@@ -1,7 +1,8 @@
 <head>
 
 <script src="jsencrypt.min.js" type="application/javascript"></script>
-<script src="aes.js" type="application/javascript"></script>
+<script src="aes.js"></script>
+<script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/core.js"></script>
 <script src="http://code.jquery.com/jquery-1.8.3.min.js"></script>
 <script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/core-min.js"></script>
 <script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/enc-base64.js"></script>
@@ -25,78 +26,108 @@ function login()
 
 function send()
 {
-	var streamid=document.getElementById('streamid').value;
-	var json=document.getElementById('json').value;
+	
+	var json=JSON.parse($('#json').val());
+	if(!json)
+	{
+		("#output").val("invalid json");
+		return;
+	}
+	json.command=JSON.parse($('#command').val());
+	if(!json)
+	{
+		("#output").val("invalid command json");
+		return;
+	}
 	var key=document.getElementById('key').value;
-	var params=CryptoJS.AES.encrypt(json,key);
+	var streamid=document.getElementById('streamid').value;
+	var params=CryptoJS.AES.encrypt(JSON.stringify(json),key);
 	var e_json=params.toString();
 	var jqxhr=$.post("/api/nrest/",{json:e_json,streamid:streamid},
 	function(data,text,jqXHR)
 	{
 		var e_resp=data;
 		var d_resp=CryptoJS.AES.decrypt(e_resp,key);
-		alert(d_resp.toString(CryptoJS.enc.Utf8));
-	}).fail(function(error) { alert(error.responseText) });
+		("#output").val(d_resp.toString(CryptoJS.enc.Utf8));
+	}).fail(function(error) { ("#output").val(error.responseText) });
+}
+function setCmd(id,argids)
+{
+	var str2=document.getElementById(id).innerHTML;
+	var str=str2.replace(/{(\d+)}/g, function(match, number) { 
+	var rep= document.getElementById(argids[number]).value;
+      return rep;
+    });
+	var cmd=$('#command');
+	cmd.val(str);
 }
 </script>
 </head>
 <body>
 streamid: <input type="text" id="streamid" value="12345"><br>
 <p>
-username: <input type="text" id="username" value="zacaj"><br>
+user id: <input type="text" id="username" value="1"><br>
 private key: <input type="text" id="privateKey">
 <input type="submit" onclick="login();" value="log in">
 </p>
-<p>
-json: <input type="text" id="json" value='{     "user":"zacaj",     "timestamp":"",     "uid":"dfgdfg",     "command": 	{ 		"command":"test-get", 		"id":"2" 	} }'><br>
-next-key: <input type="text" id="key" value="7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153"><br>
+<p>next-key: <input type="text" id="key" value="7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153"><br>
+json: <br>
+<textarea cols="50" rows="5" id="json" value=''>
+{     
+	"user":"zacaj",   
+	"timestamp":"",
+	"uid":"dfgdfg"
+}</textarea>(command added)<br>
+command:<br>
+<textarea cols="50" rows="15" id="command">
+{
+	"command":"test-get",
+	"id":"2"
+}
+</textarea><br>
 <input type="submit" onclick="send();" value="send command">
 <p id="output"></p>
-<p>
-get: <br>
+<p style="width: 300px; float:right;">
+<p><h4>test-get</h4>
+id: <input type="text" id="get-id" value="3"><br>
+<input type="submit" onclick='setCmd("getj",["get-id"]);' value="setup">
+<p style="display:none" id="getj">
 {
-	"user" : "zacaj",
-	"timestamp" : "",
-	"uid" : "dfgdfg",
-	"command" : {
-		"command" : "test-get",
-		"id" : "3"
-	}
+	"command" : "test-get",
+	"id" : "{0}"
 }
-<br>
-put:<br>
-{
-	"user" : "zacaj",
-	"timestamp" : "",
-	"uid" : "dfgdfg",
-	"command" : {
-		"command" : "test-put",
-		"id" : "3",
-		"str" : "hello"
-	}
+</p></p>
+<p><h4>test-put</h4>
+id: <input type="text" id="put-id" value="3"><br>
+str: <input type="text" id="put-str" value="hello world"><br>
+<input type="submit" onclick='setCmd("putj",["put-id","put-str"]);' value="setup">
+<p style="display:none" id="putj">{
+	"command" : "test-put",
+	"id" : "{0}",
+	"str" : "{1}"
 }
-<br>
-put-key:<br>
-{
-	"user" : "zacaj",
-	"timestamp" : "",
-	"uid" : "dfgdfg",
-	"command" : {
-		"command" : "put-key",
-		 "uid":"user@server.com|12345", 
-		"e_key":"hello world"
-	}
+</p></p>
+<p><h4>put-key</h4>
+uid: <input type="text" id="put-key-uid" value="3"><br>
+s_key: <input type="text" id="put-key-skey" value="hello world"><br>
+name: <input type="text" id="put-key-name" value="test name"><br>
+<input type="submit" onclick='setCmd("put-keyj",["put-key-uid","put-key-skey","put-key-name"]);' value="setup">
+<p style="display:none" id="put-keyj">{
+	"command" : "put-key",
+	"id" : "{0}",
+	"str" : "{1}",
+	"name" : "{2}"
 }
-<br>
-get-key:<br>
-{
-	"user" : "zacaj",
-	"timestamp" : "",
-	"uid" : "dfgdfg",
-	"command" : {
-		"command" : "get-key",
-		 "uid":"user@server.com|12345"
-	}
+</p></p>
+<p><h4>get-key</h4>
+uid: <input type="text" id="get-key-uid" value="3"><br>
+<input type="submit" onclick='setCmd("get-keyj",["get-key-uid"]);' value="setup">
+<p style="display:none" id="get-keyj">{
+	"command" : "get-key",
+	"id" : "{0}"
 }
+</p></p>
 </p>
+
+<textarea cols="80" rows="12" id="output"></textarea>
 </body>

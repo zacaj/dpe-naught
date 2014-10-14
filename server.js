@@ -200,8 +200,8 @@ var nrest = function(req, res) {
 				console.log(err);
 				return;
 			}
-            var key=item.nextKey;
 			var userUid=item.user;
+            var key=item.nextKey;
 			var d_json;
 			try
 			{
@@ -212,8 +212,8 @@ var nrest = function(req, res) {
 			console.log('DEBUG: received command: '+d_json);
 			var json;
 			try { json=JSON.parse(d_json); }
-				catch(e)
-				{ res.status(400).send('JSON parse fail: '+e); return; }
+			catch(e)
+			{ res.status(400).send('JSON parse fail: '+e); return; }
 			if(!json.command || !json.uid)
 			{ res.status(400).send('json contents invalid'); return; }
 			db.collection('streams',{strict:true},function(err,collection) {
