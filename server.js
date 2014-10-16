@@ -44,6 +44,17 @@ function makeKey(name,userUid,uid,s_key)
 	};
 }
 
+function makeChannel(name,creatorUid,channelKeys)
+{
+	return {
+		uid:makeUid(),
+		creator:creatorUid,
+		"post-keys":[],
+		"channel-keys":channelKeys,
+		name:name
+	};
+}
+
 function registerAuthCommand(cmd,streamid,authid,authcode,keyUid)
 {
 	db.collection('authCommands', {strict:true}, function(err, collection) {
@@ -59,7 +70,9 @@ function registerAuthCommand(cmd,streamid,authid,authcode,keyUid)
 				"authid":authid,
 				"authcode":authcode,
 				"authkey":keyUid,
-			},{w:1});
+			},{w:1},function(err) {
+				console.log(err);
+			});
 		}
 	});
 }
@@ -161,6 +174,20 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
 				});
 			});
         });
+		db.collection('channels', {strict:true}, function(err, collection) {
+            if (err) {
+                console.log("The 'channels' collection doesn't exist. Creating it with sample data...");
+				var channels = [//automatically log zacaj in for testing
+				
+					makeChannel('test channel','1',['testkey'])
+				];
+			 
+				db.collection('channels', function(err, collection) {
+					collection.remove({uid:"07186e10-5113-4368-bd9d-f4c6c7c1fcb8"}, {safe:true}, function(err, result) {});
+					collection.insert(channels, {safe:true}, function(err, result) {});
+				});
+			}
+        });
     }
 	else
         console.log(err);
@@ -255,9 +282,9 @@ var nrest = function(req, res) {
 					console.log('error: '+ret);
 					res.send(CryptoJS.AES.encrypt(ret,key).toString());
 				};
-			if(json.auth)
+			if(json.command.auth)
 			{
-				mg.findOneIn('keystore',{uid:json.auth},function(item) {
+				mg.findOneIn('keystore',{uid:json.command.auth},function(item) {
 					if(item)
 					{
 						if(!item.p_key)
@@ -266,12 +293,12 @@ var nrest = function(req, res) {
 						{
 							var authcode=makeUid();
 							var authid=makeUid();
-							registerAuthCommand(json.command,streamid,authid,authcode,json.auth);
+							registerAuthCommand(json.command,streamid,authid,authcode,json.command.auth);
 							var rsa = new NodeRSA(item.p_key);
 							doSuccessResponse({
 								"authid":authid,
 								"p_authcode":rsa.encrypt(authcode,'base64'),
-								"auth-key":json.auth,
+								"auth-key":json.command.auth,
 							});
 						}
 					}
@@ -324,11 +351,11 @@ var mg={
 	}
 };
 
-var processCommand=function(useruid,cmd,res,err,authdKeyUid)
+var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 {
-	var defErr=function(err)
+	var defErr=function(error)
 	{
-		err([{code:0,error:err}]);
+		err([{code:0,error:error}]);
 	};
 	var doAuthErr=function(err)
 	{
@@ -337,6 +364,7 @@ var processCommand=function(useruid,cmd,res,err,authdKeyUid)
 			err([{code:401,error:"authorization required"}]);
 			return false;
 		}
+		return true;
 	};
 	var checkAuth=function(allowedKeyUids)
 	{
@@ -356,6 +384,7 @@ var processCommand=function(useruid,cmd,res,err,authdKeyUid)
 		mg.findOneIn('authCommands',{authid:cmd.authid},function(item) {
 			if(item)
 			{
+			
 				if(cmd.authcode!=item.authcode)
 					err([{code:412,error:"authcode incorrect"}]);
 				else
@@ -366,16 +395,18 @@ var processCommand=function(useruid,cmd,res,err,authdKeyUid)
 		},defErr);
 		break;
 	case "edit-channel":
-		if(!cmd.uid)
+		if(typeof cmd.uid == 'undefined')
 		{	err([{code:400,error:"json key(s) missing"}]); break; }
 		if(cmd.uid=="")//new channel
 		{
 			if(cmd["remove-channel-key"] || cmd["remove-post-key"])
 			{	err([{code:406,error:"cannot remove keys from non-existent channels"}]); break;}
+			if(typeof cmd["add-channel-key"] == 'undefined')
+			{	err([{code:400,error:"add-channel-key missing"}]); break; }
 			var channel={
 				uid:makeUid(),
 				creator:userUid,
-				"channel-keys":cmd["add-channel-keys"],
+				"channel-keys":cmd["add-channel-key"],
 				name:cmd.name,
 			};
 			if(cmd["add-post-key"])
@@ -387,6 +418,9 @@ var processCommand=function(useruid,cmd,res,err,authdKeyUid)
 				collection.insert(channel,{w:1},function(err) {
 					if(err)
 					{ console.log(err); defErr("internal db insert fail"); }
+					else {
+						res({uid:channel.uid});
+					}
 				});
 			},defErr);
 			break;
@@ -395,7 +429,8 @@ var processCommand=function(useruid,cmd,res,err,authdKeyUid)
 		mg.findOneIn('channels',{uid:cmd.uid},function(item,collection) {
 			if(item)
 			{
-				var update=new Object();
+				//if(!checkAuth(item["channel-keys"])) return;
+				var update=item;
 				if(cmd.name)
 				{
 					if(cmd.name=="")
@@ -408,11 +443,15 @@ var processCommand=function(useruid,cmd,res,err,authdKeyUid)
 				collection.update({uid:cmd.uid},update,{w:1},function(err) {
 					if(err)
 					{ console.log(err); defErr("internal db update fail"); }
+					else {
+						res({uid:item.uid});
+					}
 				});
 			}
 			else
 				err([{code:404,error:"'uid' not found"}]);
 		},defErr);
+		break;
 	case "login":
 		res({
 			'logout-time':'60m',//todo
@@ -444,12 +483,12 @@ var processCommand=function(useruid,cmd,res,err,authdKeyUid)
 		},defErr);
 		break;   
 	case "put-key":
-		if(!cmd.uid || !cmd.s_key)
+		if(!cmd.uid || (!cmd.s_key && !cmd.p_key))
 		{	err([{code:400,error:"json key(s) missing"}]); break; }
 		//todo check uid format
 		mg.doCmdIn('keystore',function(keystore)
 		{
-			keystore.update({uid:cmd.uid},{s_key:cmd.s_key,uid:cmd.uid},{upsert:true,safe:true,w:1},function(err)
+			keystore.update({uid:cmd.uid},{s_key:cmd.s_key,uid:cmd.uid,p_key:cmd.p_key},{upsert:true,safe:true,w:1},function(err)
 			{
 				if(err)
 				{ console.log(err); defErr("internal upsert fail"); }
@@ -463,7 +502,7 @@ var processCommand=function(useruid,cmd,res,err,authdKeyUid)
 		{	err([{code:400,error:"json key(s) missing"}]); break; }
 		mg.findOneIn('keystore',{'uid':cmd.uid},function(item) {			
 			if(item)
-				res({uid:item.uid,s_key:item.s_key});
+				res({uid:item.uid,s_key:item.s_key,p_key:item.p_key});
 			else
 				err([{code:404,error:"uid "+cmd.id+" not found"}]);
 		},defErr);

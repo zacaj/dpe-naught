@@ -37,6 +37,7 @@ function log(str)
 	$("#output").val($("#output").val()+str+"\n");
 	//$("#output").scrollTop = $("#output").scrollHeight;
 	$('#output').scrollTop($('#output')[0].scrollHeight);
+	console.log(str);
 }
 function login()
 {
@@ -52,19 +53,30 @@ function login()
 		alert(nextkey);
 	});
 }
-
-function send()
+function send2()
 {
 	if($("#clear").prop('checked'))
 		$("#output").val("");
+	send();
+}
+function send(i_json_str,i_key)
+{
 	log("beginning send()");
-	var json=JSON.parse($('#json').val());
-	if(!json)
+	var json;
+	if(!i_json_str)
 	{
-		("#output").val("invalid json");
-		return;
+		json=JSON.parse($('#json').val());
+		if(!json)
+		{
+			("#output").val("invalid json");
+			return;
+		}
+		json.command=JSON.parse($('#command').val());
+		if($("#auth-uid").val().length>0)
+			json.command.auth=$("#auth-uid").val();
 	}
-	json.command=JSON.parse($('#command').val());
+	else
+		json=JSON.parse(i_json_str);
 	if(!json)
 	{
 		("#output").val("invalid command json");
@@ -72,7 +84,7 @@ function send()
 	}
 	var json_str=JSON.stringify(json, null, "\t");
 	log("json: "+json_str);
-	var key=document.getElementById('key').value;
+	var key=i_key || document.getElementById('key').value;
 	var streamid=document.getElementById('streamid').value;
 	var params=CryptoJS.AES.encrypt(json_str,key);
 	var e_json=params.toString();
@@ -83,7 +95,38 @@ function send()
 		var e_resp=data;
 		log("receive encrypted: \n"+e_resp);
 		var d_resp=CryptoJS.AES.decrypt(e_resp,key);
-		log("response:\n"+JSON.stringify(JSON.parse(d_resp.toString(CryptoJS.enc.Utf8)), null, "\t"));
+		var resp=JSON.parse(d_resp.toString(CryptoJS.enc.Utf8));
+		if(resp.errors)
+		{
+			log("error 0: "+resp.errors[0].code+" - "+resp.errors[0].error);
+			return;
+		}
+		var response=resp.response;
+		if(response.authid)
+		{
+			log("authing with "+response["auth-key"]+" (authid "+response.authid+")");
+			var decrypt=new JSEncrypt();
+			decrypt.setPrivateKey($("#auth-key").val());
+			var authcode=decrypt.decrypt(response.p_authcode);
+			if(!authcode)
+			{
+				log("authcode decode failure");
+				return;
+			}
+			log("authcode: "+authcode);
+			send(JSON.stringify(
+				{
+					user: json.user,
+					timestamp:"",
+					uid:json.uid+"auth", //ugh
+					command: {
+						command: "perform-auth-command",
+						authid: response.authid,
+						authcode: authcode
+					},
+				}),	key);
+		}
+		else log("response:\n"+JSON.stringify(resp, null, "\t"));
 	}).fail(function(error) { log("error: "+(error.responseText)) });
 }
 function setCmd(id,argids)
@@ -107,6 +150,8 @@ private key: <input type="text" id="privateKey" class="deletable">
 <input type="submit" onclick="login();" value="log in">
 </p>
 <p>next-key: <input type="text" id="key" value="7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153"><br>
+<p>auth-uid: <input type="text" id="auth-uid" value="" class="deletable"><br>
+<p>auth-key: (private)<input type="text" id="auth-key" value="" class="deletable"><br>
 json: <br>
 <textarea cols="50" rows="5" id="json" value=''>
 {     
@@ -120,8 +165,8 @@ command:<br>
 	"command":"test-get",
 	"id":"2"
 }
-</textarea><br>
-<input type="submit" onclick="send();" value="send command">
+</textarea>(auth added from inputs above)<br>
+<input type="submit" onclick="send2();" value="send command">
  clear output?: <input type="checkbox" id="clear" checked>
 <h4>Output</h4>
 <textarea cols="80" rows="12" id="output"></textarea>
@@ -159,7 +204,7 @@ name: <input type="text" id="put-key-name" value="test name" class="deletable"><
 <p style="display:none" id="put-keyj">{
 	"command" : "put-key",
 	"uid" : "{0}",
-	"str" : "{1}",
+	"s_key" : "{1}",
 	"name" : "{2}"
 }
 </p></p>
@@ -172,15 +217,14 @@ uid: <input type="text" id="get-key-uid" value="3" class="deletable"><br>
 }
 </p></p>
 <p><h4>edit-channel</h4>
+authd
 uid: <input type="text" id="edit-channel-uid" value="3" class="deletable"><br>
-auth: <input type="text" id="edit-channel-auth" value="dfghdfh" class="deletable"><br>
 name: <input type="text" id="edit-channel-name" value="channel name" class="deletable"><br>
-<input type="submit" onclick='setCmd("edit-channelj",["edit-channel-uid","edit-channel-auth","edit-channel-name"]);' value="setup">
+<input type="submit" onclick='setCmd("edit-channelj",["edit-channel-uid","edit-channel-name"]);' value="setup">
 <p style="display:none" id="edit-channelj">{
 	"command" : "edit-channel",
 	"uid" : "{0}",
-	"auth" : "{1}",
-	"name" : "{2}"
+	"name" : "{1}"
 }
 </p></p>
 </div>
