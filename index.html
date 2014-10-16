@@ -8,7 +8,36 @@
 <script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/enc-base64.js"></script>
 
 <script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/enc-utf16-min.js"></script>
+ <style>
+            span.deleteicon {
+                position: relative;
+            }
+            span.deleteicon span {
+                position: absolute;
+                display: block;
+                top: 5px;
+                right: 0px;
+                width: 16px;
+                height: 16px;
+                background: url('http://cdn.sstatic.net/stackoverflow/img/sprites.png?v=4') 0 -690px;
+                cursor: pointer;
+            }
+            span.deleteicon input {
+                padding-right: 16px;
+            }
+        </style>
 <script>
+$(document).ready(function() {
+	$('input.deletable').wrap('<span class="deleteicon" />').after($('<span/>').click(function() {
+		$(this).prev('input').val('').focus();
+	}));
+});
+function log(str)
+{
+	$("#output").val($("#output").val()+str+"\n");
+	//$("#output").scrollTop = $("#output").scrollHeight;
+	$('#output').scrollTop($('#output')[0].scrollHeight);
+}
 function login()
 {
 	var key=document.getElementById('privateKey').value;
@@ -26,7 +55,9 @@ function login()
 
 function send()
 {
-	
+	if($("#clear").prop('checked'))
+		$("#output").val("");
+	log("beginning send()");
 	var json=JSON.parse($('#json').val());
 	if(!json)
 	{
@@ -39,17 +70,21 @@ function send()
 		("#output").val("invalid command json");
 		return;
 	}
+	var json_str=JSON.stringify(json, null, "\t");
+	log("json: "+json_str);
 	var key=document.getElementById('key').value;
 	var streamid=document.getElementById('streamid').value;
-	var params=CryptoJS.AES.encrypt(JSON.stringify(json),key);
+	var params=CryptoJS.AES.encrypt(json_str,key);
 	var e_json=params.toString();
+	log("send encrypted: \n"+e_json);
 	var jqxhr=$.post("/api/nrest/",{json:e_json,streamid:streamid},
 	function(data,text,jqXHR)
 	{
 		var e_resp=data;
+		log("receive encrypted: \n"+e_resp);
 		var d_resp=CryptoJS.AES.decrypt(e_resp,key);
-		("#output").val(d_resp.toString(CryptoJS.enc.Utf8));
-	}).fail(function(error) { ("#output").val(error.responseText) });
+		log("response:\n"+JSON.stringify(JSON.parse(d_resp.toString(CryptoJS.enc.Utf8)), null, "\t"));
+	}).fail(function(error) { log("error: "+(error.responseText)) });
 }
 function setCmd(id,argids)
 {
@@ -64,10 +99,11 @@ function setCmd(id,argids)
 </script>
 </head>
 <body>
+<div style="float:left;">
 streamid: <input type="text" id="streamid" value="12345"><br>
 <p>
 user id: <input type="text" id="username" value="1"><br>
-private key: <input type="text" id="privateKey">
+private key: <input type="text" id="privateKey" class="deletable">
 <input type="submit" onclick="login();" value="log in">
 </p>
 <p>next-key: <input type="text" id="key" value="7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153"><br>
@@ -86,10 +122,18 @@ command:<br>
 }
 </textarea><br>
 <input type="submit" onclick="send();" value="send command">
-<p id="output"></p>
-<p style="width: 300px; float:right;">
+ clear output?: <input type="checkbox" id="clear" checked>
+<h4>Output</h4>
+<textarea cols="80" rows="12" id="output"></textarea>
+</body>
+</div>
+
+
+
+
+<div style="width: 300px; float:right;">
 <p><h4>test-get</h4>
-id: <input type="text" id="get-id" value="3"><br>
+id: <input type="text" id="get-id" value="3" class="deletable"><br>
 <input type="submit" onclick='setCmd("getj",["get-id"]);' value="setup">
 <p style="display:none" id="getj">
 {
@@ -98,8 +142,8 @@ id: <input type="text" id="get-id" value="3"><br>
 }
 </p></p>
 <p><h4>test-put</h4>
-id: <input type="text" id="put-id" value="3"><br>
-str: <input type="text" id="put-str" value="hello world"><br>
+id: <input type="text" id="put-id" value="3" class="deletable"><br>
+str: <input type="text" id="put-str" value="hello world" class="deletable"><br>
 <input type="submit" onclick='setCmd("putj",["put-id","put-str"]);' value="setup">
 <p style="display:none" id="putj">{
 	"command" : "test-put",
@@ -108,26 +152,35 @@ str: <input type="text" id="put-str" value="hello world"><br>
 }
 </p></p>
 <p><h4>put-key</h4>
-uid: <input type="text" id="put-key-uid" value="3"><br>
-s_key: <input type="text" id="put-key-skey" value="hello world"><br>
-name: <input type="text" id="put-key-name" value="test name"><br>
+uid: <input type="text" id="put-key-uid" value="3" class="deletable"><br>
+s_key: <input type="text" id="put-key-skey" value="hello world" class="deletable"><br>
+name: <input type="text" id="put-key-name" value="test name" class="deletable"><br>
 <input type="submit" onclick='setCmd("put-keyj",["put-key-uid","put-key-skey","put-key-name"]);' value="setup">
 <p style="display:none" id="put-keyj">{
 	"command" : "put-key",
-	"id" : "{0}",
+	"uid" : "{0}",
 	"str" : "{1}",
 	"name" : "{2}"
 }
 </p></p>
 <p><h4>get-key</h4>
-uid: <input type="text" id="get-key-uid" value="3"><br>
+uid: <input type="text" id="get-key-uid" value="3" class="deletable"><br>
 <input type="submit" onclick='setCmd("get-keyj",["get-key-uid"]);' value="setup">
 <p style="display:none" id="get-keyj">{
 	"command" : "get-key",
-	"id" : "{0}"
+	"uid" : "{0}"
 }
 </p></p>
-</p>
-
-<textarea cols="80" rows="12" id="output"></textarea>
-</body>
+<p><h4>edit-channel</h4>
+uid: <input type="text" id="edit-channel-uid" value="3" class="deletable"><br>
+auth: <input type="text" id="edit-channel-auth" value="dfghdfh" class="deletable"><br>
+name: <input type="text" id="edit-channel-name" value="channel name" class="deletable"><br>
+<input type="submit" onclick='setCmd("edit-channelj",["edit-channel-uid","edit-channel-auth","edit-channel-name"]);' value="setup">
+<p style="display:none" id="edit-channelj">{
+	"command" : "edit-channel",
+	"uid" : "{0}",
+	"auth" : "{1}",
+	"name" : "{2}"
+}
+</p></p>
+</div>
