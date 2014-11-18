@@ -15,6 +15,13 @@ var Server = mongo.Server,
 var server = new Server('localhost', 27017, {auto_reconnect: true});
 db = new Db('dpe-n-db', server,{w:1});
  
+function makeDate(date)
+{
+	if(!date)
+		return new Date();
+	return new Date(date); //horrible horrible horrible 
+}
+ 
 function makeUid()
 {
 	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -34,13 +41,27 @@ function makeUser(name,publicKey)
 	return user;
 }
 
-function makeKey(name,userUid,uid,s_key)
+function makePublicKey(creatorUid,uid,key)
 {
 	return {
 		uid:uid,
-		s_key:s_key,
-		user:userUid,
-		name:name
+		key:key,
+		creator:creatorUid
+	};
+}
+
+function makeFingerprint(key)
+{
+	return CryptoJS.SHA3(key).toString();
+}
+
+function makeStore(creatorUid,uid,data)
+{
+	return {
+		uid:uid,
+		data:data,
+		creator:creatorUid,
+		date: makeDate()
 	};
 }
 
@@ -142,24 +163,32 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
 				});
            // }
         });
-		db.collection('keystore', {strict:true}, function(err, collection) {
+		db.collection('store', {strict:true}, function(err, collection) {
            // if (err || 1) {
-                console.log("The 'keystore' collection doesn't exist. Creating it with sample data...");
-				var keystore = [//automatically log zacaj in for testing
-				{
-					uid:"zacaj@server.com|privatetest",
-					s_key:"blarg",
-					user:"1",
-					name:"test key"
-				}];
+                console.log("The 'store' collection doesn't exist. Creating it with sample data...");
+				
 			 
-				db.collection('keystore', function(err, collection) {
+				db.collection('store', function(err, collection) {
 					if(err)
 						console.log(err);
-					collection.remove({uid:"zacaj@server.com|privatetest"}, {safe:true}, function(err, result) {});
-					collection.insert(keystore, {safe:true}, function(err, result) {});
+					//collection.remove({uid:"zacaj@server.com|privatetest"}, {safe:true}, function(err, result) {});
+					//collection.insert(keystore, {safe:true}, function(err, result) {});
 				});
            // }
+        });
+		db.collection('publicKeyStore', {strict:true}, function(err, collection) {
+            if (err) {
+                console.log("The 'publicKeyStore' collection doesn't exist. Creating it with sample data...");
+				
+			 
+				db.collection('publicKeyStore', function(err, collection) {
+					if(err)
+						console.log(err);
+					collection.insert({empty:true}, {safe:true}, function(err, result) {});
+					collection.remove({empty:true}, {safe:true}, function(err, result) {});
+					
+				});
+            }
         });
 		db.collection('authCommands', {strict:true}, function(err, collection) {
             if (err) {
@@ -353,6 +382,18 @@ var mg={
 
 var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 {
+	var checkKeys=function(keys) {
+		var errs=new Array();
+		for(var i=0;i<keys.length;i++)
+			if(typeof cmd[keys[i]] == 'undefined')
+				errs.push({code:400,error:keys[i]+" missing"});
+		if(errs.length>0)
+		{
+			err(errs);
+			return false;
+		}
+		return true;
+	};
 	var defErr=function(error)
 	{
 		err([{code:0,error:error}]);
@@ -379,8 +420,7 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 	switch(cmd.command)
 	{
 	case "perform-auth-command":
-		if(!cmd.authid || !cmd.authcode)
-		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		if(!checkKeys(["authid","authcode"])) break;
 		mg.findOneIn('authCommands',{authid:cmd.authid},function(item) {
 			if(item)
 			{
@@ -395,8 +435,7 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 		},defErr);
 		break;
 	case "edit-channel":
-		if(typeof cmd.uid == 'undefined')
-		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		if(!checkKeys(["uid"])) break;
 		if(cmd.uid=="")//new channel
 		{
 			if(cmd["remove-channel-key"] || cmd["remove-post-key"])
@@ -459,8 +498,7 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 		});
 		break;        
 	case "test-put":
-		if(!cmd.id)
-		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		if(!checkKeys(["id","str"])) break;
 		mg.doCmdIn('test',function(test)
 		{
 			test.update({id:cmd.id},{str:cmd.str,id:cmd.id},{upsert:true,safe:true,w:1},function(err)
@@ -473,8 +511,7 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 		},defErr);
 		break;        
 	case "test-get":
-		if(!cmd.id)
-		{	err([{code:400,error:"json key(s) missing"}]); break; }
+		if(!checkKeys(["id"])) break;
 		mg.findOneIn('test',{'id':cmd.id},function(item) {			
 			if(item)
 				res({str:item.str});
@@ -482,13 +519,13 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 				err([{code:404,error:"id "+cmd.id+" not found"}]);
 		},defErr);
 		break;   
-	case "put-key":
-		if(!cmd.uid || (!cmd.s_key && !cmd.p_key))
-		{	err([{code:400,error:"json key(s) missing"}]); break; }
+	case "put-public-key":
+		if(!checkKeys(["key"])) break;
 		//todo check uid format
-		mg.doCmdIn('keystore',function(keystore)
+		mg.doCmdIn('publicKeyStore',function(keystore)
 		{
-			keystore.update({uid:cmd.uid},{s_key:cmd.s_key,uid:cmd.uid,p_key:cmd.p_key},{upsert:true,safe:true,w:1},function(err)
+			var fingerprint=makeFingerprint(cmd.key);
+			keystore.update({fingerprint:fingerprint},{key:cmd.key,fingerprint:fingerprint,user:userUid},{upsert:true,safe:true,w:1},function(err)
 			{
 				if(err)
 				{ console.log(err); defErr("internal upsert fail"); }
@@ -497,16 +534,77 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 			});		
 		},defErr);
 		break;        
-	case "get-key":
-		if(!cmd.uid)
-		{	err([{code:400,error:"json key(s) missing"}]); break; }
-		mg.findOneIn('keystore',{'uid':cmd.uid},function(item) {			
+	case "get-public-key":
+		if(!checkKeys(["fingerprint"])) break;
+		var fingerprint=cmd.fingerprint;
+		mg.findOneIn('publicKeyStore',{'fingerprint':fingerprint},function(item) {			
 			if(item)
-				res({uid:item.uid,s_key:item.s_key,p_key:item.p_key});
+				res({fingerprint:item.fingerprint,key:item.key});
 			else
-				err([{code:404,error:"uid "+cmd.id+" not found"}]);
+				err([{code:404,error:"fingerprint "+fingerprint+" not found"}]);
 		},defErr);
 		break; 		
+	case "put-store":
+		if(!checkKeys(["uid","data"])) break;
+		mg.doCmdIn('store',function(store)
+		{
+			store.update({uid:cmd.uid},makeStore(userUid,cmd.uid,cmd.data),{upsert:true,safe:true,w:1},function(err)
+			{
+				if(err)
+				{ console.log(err); defErr("internal upsert fail"); }
+				else
+					res({});		
+			});		
+		},defErr);
+		break; 
+	case "get-store":
+		if(!checkKeys(["uid"])) break;
+		mg.findOneIn('store',{'uid':cmd.uid},function(item) {			
+			if(item)
+				res({uid:item.uid,data:item.data});
+			else
+				err([{code:404,error:"uid "+cmd.uid+" not found"}]);
+		},defErr);
+		break;   
+	case "get-stores":
+		if(cmd.oldest)
+		{
+			mg.findOneIn('store',{'uid':cmd.oldest,creator:userUid},function(item) {			
+				if(item)
+				{
+					mg.doCmdIn('store',function(store) 
+					{
+						store.find({date: {$gte: item.date}, creator: userUid}, function(err, stores)
+						{
+							if(err)
+							{ console.log(err); defErr("internal find fail"); }
+							else
+							{
+								res({stores:stores});
+							}
+						});								
+					});
+				}
+				else
+					err([{code:404,error:"oldest "+cmd.uid+" not found"}]);
+			},defErr);
+		}
+		else
+		{
+			mg.doCmdIn('store',function(store) 
+			{
+				store.find({creator: userUid}, function(err, stores)
+				{
+					if(err)
+					{ console.log(err); defErr("internal find fail"); }
+					else
+					{
+						res({stores:stores});
+					}
+				});								
+			});
+		}
+		break;
 	}
 }
 	

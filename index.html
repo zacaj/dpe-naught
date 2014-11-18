@@ -6,6 +6,7 @@
 <script src="http://code.jquery.com/jquery-1.8.3.min.js"></script>
 <script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/core-min.js"></script>
 <script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/enc-base64.js"></script>
+<script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/rollups/sha3.js"></script>
 
 <script src="http://crypto-js.googlecode.com/svn/tags/3.1.2/build/components/enc-utf16-min.js"></script>
  <style>
@@ -27,6 +28,17 @@
             }
         </style>
 <script>
+
+function doFingerprint()
+{
+	var key=$("#pubkeyfp").val();
+	var fp=CryptoJS.SHA3(key,{ outputLength: 512 });
+	$("#fingerprinter").val(fp);
+}
+
+
+
+
 $(document).ready(function() {
 	$('input.deletable').wrap('<span class="deleteicon" />').after($('<span/>').click(function() {
 		$(this).prev('input').val('').focus();
@@ -72,14 +84,20 @@ function send(i_json_str,i_key)
 			return;
 		}
 		json.command=JSON.parse($('#command').val());
-		if($("#auth-uid").val().length>0)
-			json.command.auth=$("#auth-uid").val();
-	}
+		if($("#authd").prop('checked'))
+			if($("#auth-uid").val().length>0 && $("#auth-key").val().length>0)
+				json.command.auth=$("#auth-uid").val();
+			else
+			{
+				log("ERROR: missing auth info");
+				return;
+			}
+	}		
 	else
 		json=JSON.parse(i_json_str);
 	if(!json)
 	{
-		("#output").val("invalid command json");
+		log("invalid command json");
 		return;
 	}
 	var json_str=JSON.stringify(json, null, "\t");
@@ -96,9 +114,11 @@ function send(i_json_str,i_key)
 		log("receive encrypted: \n"+e_resp);
 		var d_resp=CryptoJS.AES.decrypt(e_resp,key);
 		var resp=JSON.parse(d_resp.toString(CryptoJS.enc.Utf8));
+		$("#key").val(resp["next-key"]);
 		if(resp.errors)
 		{
-			log("error 0: "+resp.errors[0].code+" - "+resp.errors[0].error);
+			for(var i=0;i<resp.errors.length;i++)
+				log("error "+i+": "+resp.errors[i].code+" - "+resp.errors[i].error);
 			return;
 		}
 		var response=resp.response;
@@ -150,7 +170,7 @@ private key: <input type="text" id="privateKey" class="deletable">
 <input type="submit" onclick="login();" value="log in">
 </p>
 <p>next-key: <input type="text" id="key" value="7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153"><br>
-<p>auth-uid: <input type="text" id="auth-uid" value="" class="deletable"><br>
+<p>auth-uid: <input type="text" id="auth-uid" value="" class="deletable"> auth? <input type="checkbox" id="authd"><br>
 <p>auth-key: (private)<input type="text" id="auth-key" value="" class="deletable"><br>
 json: <br>
 <textarea cols="50" rows="5" id="json" value=''>
@@ -170,11 +190,15 @@ command:<br>
  clear output?: <input type="checkbox" id="clear" checked>
 <h4>Output</h4>
 <textarea cols="80" rows="12" id="output"></textarea>
+<br><br><br>
+<div>
+<p>fingerprinter:<br>
+<input type="text" id="pubkeyfp" class="deletable">
+<input type="submit" onclick="doFingerprint();" value="calculate fingerprint">
+<textarea cols="30" rows="3" id="fingerprinter"></textarea>
+</div>
 </body>
 </div>
-
-
-
 
 <div style="width: 300px; float:right;">
 <p><h4>test-get</h4>
@@ -196,31 +220,27 @@ str: <input type="text" id="put-str" value="hello world" class="deletable"><br>
 	"str" : "{1}"
 }
 </p></p>
-<p><h4>put-key</h4>
-uid: <input type="text" id="put-key-uid" value="3" class="deletable"><br>
-s_key: <input type="text" id="put-key-skey" value="hello world" class="deletable"><br>
-name: <input type="text" id="put-key-name" value="test name" class="deletable"><br>
-<input type="submit" onclick='setCmd("put-keyj",["put-key-uid","put-key-skey","put-key-name"]);' value="setup">
+<p><h4>put-public-key</h4>
+key: <input type="text" id="put-key-key" value="hello world" class="deletable"><br>
+<input type="submit" onclick='setCmd("put-keyj",["put-key-key"]);' value="setup">
 <p style="display:none" id="put-keyj">{
-	"command" : "put-key",
-	"uid" : "{0}",
-	"s_key" : "{1}",
-	"name" : "{2}"
+	"command" : "put-public-key",
+	"key" : "{0}"
 }
 </p></p>
-<p><h4>get-key</h4>
-uid: <input type="text" id="get-key-uid" value="3" class="deletable"><br>
+<p><h4>get-public-key</h4>
+fingerprint: <input type="text" id="get-key-uid" value="3" class="deletable"><br>
 <input type="submit" onclick='setCmd("get-keyj",["get-key-uid"]);' value="setup">
 <p style="display:none" id="get-keyj">{
-	"command" : "get-key",
-	"uid" : "{0}"
+	"command" : "get-public-key",
+	"fingerprint" : "{0}"
 }
 </p></p>
 <p><h4>edit-channel</h4>
 authd
-uid: <input type="text" id="edit-channel-uid" value="3" class="deletable"><br>
+uid: <input type="text" id="edit-channel-uid" value="e0f32caf-80e3-46f6-a1c9-e2189190f47e" class="deletable"><br>
 name: <input type="text" id="edit-channel-name" value="channel name" class="deletable"><br>
-<input type="submit" onclick='setCmd("edit-channelj",["edit-channel-uid","edit-channel-name"]);' value="setup">
+<input type="submit" onclick='setCmd("edit-channelj",["edit-channel-uid","edit-channel-name"]);$("#authd").prop("checked", true);' value="setup">
 <p style="display:none" id="edit-channelj">{
 	"command" : "edit-channel",
 	"uid" : "{0}",
