@@ -247,13 +247,18 @@ var nrest = function(req, res) {
     var e_json = req.param("json");
 	if(!e_json || !streamid)
 		return;
-	console.log(streamid);
+	console.log('"'+streamid+'"');
 	
     db.collection('streams', function(err, collection) {
         collection.findOne({'uid':streamid}, function(err, item) {
 			if(err)
 			{
 				console.log(err);
+				return;
+			}
+			if(!item)
+			{
+				res.status(400).send('stream '+streamid+' not found');
 				return;
 			}
 			var userUid=item.user;
