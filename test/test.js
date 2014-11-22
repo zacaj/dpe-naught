@@ -14,17 +14,16 @@ function test(name,func)
 {
 	return function(log,done)
 	{
-		log(name+"...\t\t\t");
 		func(function(result)
 		{
 			if(result==true)
 			{
-				log('success\n');
+				log(name+'...\t\t\tsuccess\n');
 				done(true);
 			}
 			else
 			{
-				log('\n'+result+'\n\n');
+				log(name+'...\t\t\t\n'+result+'\n\n');
 				done(false);
 			}				
 		});
@@ -40,27 +39,28 @@ function sequence(name)
 		func=funcs.shift();
 		if(func)
 		{
+			log('#'+(successful+1)+': ');
 			func(log,function(result)
 			{
 				if(result==true)
 					doSequenceFunc(log,funcs,successful+1,total,done);
 				else
 				{
-					log('fail on '+(successful+1)+'/'+total+'\n');
+					log('/'+name+'...\t\tfail on #'+(successful+1)+' of '+total+'\n');
 					done(result);
 				}
 			});
 		}
 		else
 		{
-			log('success\n');
+			log('/'+name+"...\t\tsuccess\n");
 			done(true);
 		}
 	};
 	return function(log,done)
 	{
-		log(name+"...\t\t\t");
 		var successful=0;
+		log(name+"...\t\t\tv");
 		doSequenceFunc(indentLog(log),funcs,successful,funcs.length,done);
 	};
 }
@@ -83,12 +83,12 @@ function group(name)
 		{
 			if(successful==total)
 			{
-				log('success\n');
+				log('/'+name+'...\t\tsuccess\n');
 				done(true);
 			}
 			else 
 			{
-				log('succeeded on '+successful+'/'+length+'\n');
+				log('/'+name+'...\t\tsucceeded on '+successful+'/'+length+'\n');
 				//if(successful==0)
 				//	return false;
 				//else
@@ -98,8 +98,8 @@ function group(name)
 	};
 	return function(log,done)
 	{
-		log(name+"...\t\t\t");
 		var successful=0;
+		log(name+'...\t\t\tv');
 		doGroupFunc(indentLog(log),funcs,successful,funcs.length,done);
 	};
 }
@@ -254,7 +254,56 @@ sequence('private store',
 			uid:'test',
 			data:'hello'
 		},done);
-	})
+	}),
+	sequence('get-stores',
+		test('put-store 1', function(done) {
+			testCmd(
+			{
+				command:"put-store",
+				uid:'test',
+				data:"hello"
+			},
+			{},done);
+		}),
+		test('put-store 2', function(done) {
+			testCmd(
+			{
+				command:"put-store",
+				uid:'test2',
+				data:"cruel"
+			},
+			{},done);
+		}),
+		test('put-store 3', function(done) {
+			testCmd(
+			{
+				command:"put-store",
+				uid:'test3',
+				data:"world"
+			},
+			{},done);
+		}),
+		test('get-stores', function(done) {
+			testCmd(
+			{
+				command:"get-stores",
+				oldest:'test2'
+			},
+			{
+				stores:
+				[
+					{
+						uid:'test2',
+						data:'cruel'
+					},
+					{
+						uid:'test3',
+						data:'world'
+					}
+				]
+			},done);
+		})
+	)
 )
 );
 		

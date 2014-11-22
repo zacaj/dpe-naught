@@ -567,7 +567,7 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 		break; 
 	case "get-store":
 		if(!checkKeys(["uid"])) break;
-		mg.findOneIn('store',{'uid':cmd.uid},function(item) {			
+		mg.findOneIn('store',{'uid':cmd.uid,creator:userUid},function(item) {			
 			if(item)
 				res({uid:item.uid,data:item.data});
 			else
@@ -575,6 +575,16 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 		},defErr);
 		break;   
 	case "get-stores":
+		var stripStores=function(stores)
+		{
+			var ret=new Array();
+			console.log(stores.length);
+			for(var i=0;i<stores.length;i++)
+			{
+				ret.push({uid:stores[i].uid,data:stores[i].data});
+			}
+			return ret;
+		};
 		if(cmd.oldest)
 		{
 			mg.findOneIn('store',{'uid':cmd.oldest,creator:userUid},function(item) {			
@@ -582,13 +592,13 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 				{
 					mg.doCmdIn('store',function(store) 
 					{
-						store.find({date: {$gte: item.date}, creator: userUid}, function(err, stores)
+						store.find({date: {$gte: item.date}, creator: userUid},{sort:[['date','asc']]}).toArray(function(err, stores)
 						{
 							if(err)
 							{ console.log(err); defErr("internal find fail"); }
 							else
 							{
-								res({stores:stores});
+								res({stores:stripStores(stores)});
 							}
 						});								
 					});
@@ -599,18 +609,19 @@ var processCommand=function(userUid,cmd,res,err,authdKeyUid)
 		}
 		else
 		{
+			console.log(userUid);
 			mg.doCmdIn('store',function(store) 
 			{
-				store.find({creator: userUid}, function(err, stores)
+				store.find({creator: userUid},{sort:[['date','asc']]}).toArray(function(err, stores)
 				{
 					if(err)
 					{ console.log(err); defErr("internal find fail"); }
 					else
 					{
-						res({stores:stores});
+						res({stores:stripStores(stores)});
 					}
 				});								
-			});
+			},defErr);
 		}
 		break;
 	}
