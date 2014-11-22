@@ -173,6 +173,8 @@ uku7JUXcVpt08DFSceCEX9unCuMcT72rAQlLpdZir876
 						console.log(err);
 					//collection.remove({uid:"zacaj@server.com|privatetest"}, {safe:true}, function(err, result) {});
 					//collection.insert(keystore, {safe:true}, function(err, result) {});
+					collection.insert({empty:true}, {safe:true}, function(err, result) {});
+					collection.remove({empty:true}, {safe:true}, function(err, result) {});
 				});
            // }
         });
@@ -258,6 +260,7 @@ var nrest = function(req, res) {
 			}
 			if(!item)
 			{
+				console.log('404: stream '+streamid+' not found');
 				res.status(400).send('stream '+streamid+' not found');
 				return;
 			}

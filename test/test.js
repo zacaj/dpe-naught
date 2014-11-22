@@ -12,75 +12,112 @@ function indentLog(log)
 
 function test(name,func)
 {
-	return function(log)
+	return function(log,done)
 	{
 		log(name+"...\t\t\t");
-		try
+		func(function(result)
 		{
-			func();
-			log('success\n');
-			return true;
-		}
-		catch(err)
-		{
-			log('\n'+err+'\n\n');
-			return false;
-		}
+			if(result==true)
+			{
+				log('success\n');
+				done(true);
+			}
+			else
+			{
+				log('\n'+result+'\n\n');
+				done(false);
+			}				
+		});
 	};
 }
 
 function sequence(name)
 {
-	return function(log)
+	var funcs=Array.prototype.slice.call(arguments);
+	funcs.splice(0,1);
+	var doSequenceFunc=function(log,funcs,successful,total,done)
+	{
+		func=funcs.shift();
+		if(func)
+		{
+			func(log,function(result)
+			{
+				if(result==true)
+					doSequenceFunc(log,funcs,successful+1,total,done);
+				else
+				{
+					log('fail on '+(successful+1)+'/'+total+'\n');
+					done(result);
+				}
+			});
+		}
+		else
+		{
+			log('success\n');
+			done(true);
+		}
+	};
+	return function(log,done)
 	{
 		log(name+"...\t\t\t");
-		for(var i=1;i<arguments.length;i++)
-		{
-			log(''+i+'. ');
-			if(arguments[i](indentLog(log))==false)
-			{
-				log('fail on '+i+'/'+(arguments.length-1)+'\n');
-				return false;
-			}
-		}
-		log('success\n');
-		return true;
+		var successful=0;
+		doSequenceFunc(indentLog(log),funcs,successful,funcs.length,done);
 	};
 }
 
 function group(name)
 {
-	return function(log)
+	var funcs=Array.prototype.slice.call(arguments);
+	funcs.splice(0,1);
+	var doGroupFunc=function(log,funcs,successful,total,done)
+	{
+		func=funcs.shift();
+		if(func)
+		{
+			func(log,function(result)
+			{
+				doGroupFunc(log,funcs,successful+(result==true?1:0),total,done);
+			});
+		}
+		else
+		{
+			if(successful==total)
+			{
+				log('success\n');
+				done(true);
+			}
+			else 
+			{
+				log('succeeded on '+successful+'/'+length+'\n');
+				//if(successful==0)
+				//	return false;
+				//else
+					done(true);
+			}
+		}
+	};
+	return function(log,done)
 	{
 		log(name+"...\t\t\t");
 		var successful=0;
-		for(var i=1;i<arguments.length;i++)
-		{
-			if(arguments[i](indentLog(log))==true)
-				successful++;
-		}
-		if(successful==arguments.length-1)
-		{
-			log('success\n');
-			return true;
-		}
-		else 
-		{
-			log('succeeded on '+i+'/'+(arguments.length-1)+'\n');
-			//if(successful==0)
-			//	return false;
-			//else
-				return true;
-		}
+		doGroupFunc(indentLog(log),funcs,successful,funcs.length,done);
 	};
 }
 
 function tests()
 {
-	for(var i=0;i<arguments.length;i++)
+	var args=Array.prototype.slice.call(arguments);
+	var testsFunc=function(funcs)
 	{
-		arguments[i](console.log);
-	}
+		var func=funcs.shift();
+		if(!func)
+			return;
+		func(console.log,function(result)
+		{
+			testsFunc(funcs);
+		});
+	};
+	testsFunc(args);
 }
 
 
@@ -99,7 +136,7 @@ function testCmd(cmd,out,done,authKey)
 		command:cmd
 	}
 	var json_str=JSON.stringify(json, null, "\t");
-	log.json=json_str;
+	log.json=json;
 	var key="7436cb48e35e8c3de32b21296c6a5e1aa4a742da76bbdcf4df792c9c0d92c153";
 	var streamid="12345";
 	var params=CryptoJS.AES.encrypt(json_str,key);
@@ -149,25 +186,42 @@ function testCmd(cmd,out,done,authKey)
 					},
 				}),	key);
 		}
-		else if(response.should.eql(out))
-			done();
-		else
-			doError(done,{wanted:out,got:response,log:log});
+		else 
+		{
+			try 
+			{
+				response.should.eql(out);
+				done(true);
+			}
+			catch (err)
+			{
+				doError(done,{wanted:out,got:response,log:log});
+			}
+		}
 	}).error(function(error) 
 	{ 
 		log.errors=[("error: "+(error))]; 
 		doError(done,log);
 	});
 }
-describe('dpe server', function() {
-	it('should be running', function(done)
-	{
-		najax("http://127.0.0.1:3000").success(function(){done();}).error(function(error){done(error);});
-	})
-});
-describe('public-key-store', function() {
-	describe('get-public-key', function() {
-		it('should return the key', function(done) {
+
+tests(
+test('dpe server running', function(done) 
+{
+	najax("http://127.0.0.1:3000").success(function(){done(true);}).error(function(error){done(error);});
+}),
+sequence('public-key-store',
+	test('put-public-key', function(done) {
+		testCmd(
+		{
+			"command" : "put-public-key",
+			"key" : "-----BEGIN PUBLIC KEY----- MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAMjPfZr6NIp33n2feeIZ5EmToGNbu6id /fzzCxNCmAj9LihI1Xw0Wb64OHHVuJy01SCbwJQjRbj1JOJwTU70W7sCAwEAAQ== -----END PUBLIC KEY-----"
+		},
+		{
+		}, done);
+	}),
+	group('get-public-key', 
+		test('should return the key', function(done) {
 			testCmd(
 			{
 				"command" : "get-public-key",
@@ -178,30 +232,32 @@ describe('public-key-store', function() {
 				"key": "-----BEGIN PUBLIC KEY----- MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAMjPfZr6NIp33n2feeIZ5EmToGNbu6id /fzzCxNCmAj9LihI1Xw0Wb64OHHVuJy01SCbwJQjRbj1JOJwTU70W7sCAwEAAQ== -----END PUBLIC KEY-----"
 			}, done);
 		})
-	});
-	describe('put-public-key', function() {
-		it('should be reported successfully', function(done) {
-			testCmd(
-			{
-				"command" : "put-public-key",
-				"key" : "-----BEGIN PUBLIC KEY----- MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAMjPfZr6NIp33n2feeIZ5EmToGNbu6id /fzzCxNCmAj9LihI1Xw0Wb64OHHVuJy01SCbwJQjRbj1JOJwTU70W7sCAwEAAQ== -----END PUBLIC KEY-----"
-			},
-			{
-			}, done);
-		});
-	});
-});
-describe('private store', function() {
-	describe('put-store', function() {
-		it('should report success', function(done) {
-			testCmd(
-			{
-				command:"put-store",
-				uid:'test',
-				data:"hello"
-			},
-			{},done);
-		}
-	}
-	describe('get-store', function
+	)
+),
+sequence('private store', 
+	test('put-store', function(done) {
+		testCmd(
+		{
+			command:"put-store",
+			uid:'test',
+			data:"hello"
+		},
+		{},done);
+	}),
+	test('get-store', function(done) {
+		testCmd(
+		{
+			command:'get-store',
+			uid:'test',
+		},
+		{
+			uid:'test',
+			data:'hello'
+		},done);
+	})
+)
+);
+		
+	
+	
 		
